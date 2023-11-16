@@ -110,6 +110,17 @@ impl<'a> ParseStream<'a> {
         }
     }
 
+    pub fn peek_parse<T: Parse<'a>>(&mut self) -> Result<Option<T>, ParseError> {
+        let start = self.start_index;
+        self.start_index = self.index;
+
+        let spanner = self.spanner();
+        let result = T::parse(self);
+        self.reset(spanner);
+        self.start_index = start;
+        result.transpose()
+    }
+
     #[track_caller]
     pub fn did_parse<T: Parse<'a>>(&mut self) -> bool {
         let start = self.start_index;
@@ -149,6 +160,15 @@ impl<'a> ParseStream<'a> {
         let item = f(self);
         self.start_index = start;
         crate::required(self, item)
+    }
+
+    pub fn fork(&self) -> ParseStream<'a> {
+        ParseStream {
+            source: self.source,
+            cursor: self.cursor,
+            start_index: self.start_index,
+            index: self.index,
+        }
     }
 
     #[inline(always)]
