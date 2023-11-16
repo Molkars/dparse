@@ -110,7 +110,8 @@ impl<'a> ParseStream<'a> {
         }
     }
 
-    pub fn peek_parse<T: Parse<'a>>(&mut self) -> Result<Option<T>, ParseError> {
+    /// Parses a value from the stream without consuming it.
+    pub fn peek_parse<T: Parse<'a>>(&mut self) -> Result<T, ParseError> {
         let start = self.start_index;
         self.start_index = self.index;
 
@@ -118,7 +119,7 @@ impl<'a> ParseStream<'a> {
         let result = T::parse(self);
         self.reset(spanner);
         self.start_index = start;
-        result.transpose()
+        result
     }
 
     #[track_caller]
