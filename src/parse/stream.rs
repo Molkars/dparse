@@ -110,6 +110,29 @@ impl<'a> ParseStream<'a> {
     }
 
     #[track_caller]
+    pub fn did_parse<T: Parse<'a>>(&mut self) -> bool {
+        let start = self.start_index;
+        self.start_index = self.index;
+
+        let spanner = self.spanner();
+        match T::parse(self) {
+            Ok(_) => {
+                self.start_index = start;
+                true
+            }
+            Err(e) if e.mismatch => {
+                self.reset(spanner);
+                self.start_index = start;
+                false
+            }
+            Err(e) => {
+                self.start_index = start;
+                false
+            }
+        }
+    }
+
+    #[track_caller]
     #[inline(always)]
     pub fn require<T: Parse<'a>>(&mut self) -> Result<T, ParseError> {
         self.require_with::<T>(T::parse)
