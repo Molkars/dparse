@@ -8,6 +8,8 @@ use crate::parse::{Parse, ParseError, ParseStream};
 
 pub mod parse;
 pub mod token;
+#[cfg(feature = "basic")]
+pub mod basic;
 
 #[inline]
 pub fn parse<'a, T: Parse<'a>>(input: &'a str) -> Result<T, ParseError> {

@@ -23,21 +23,21 @@ impl<Item, Punct> Punctuated<Item, Punct> {
         self.items.is_empty() && self.trailing.is_none()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&Item, Option<&Punct>)> {
+    pub fn iter(&self) -> impl Iterator<Item=(&Item, Option<&Punct>)> {
         self.items
             .iter()
             .map(|(item, punct)| (item, Some(punct)))
             .chain(self.trailing.iter().map(|item| (item, None)))
     }
 
-    pub fn items(&self) -> impl Iterator<Item = &Item> {
+    pub fn items(&self) -> impl Iterator<Item=&Item> {
         self.items
             .iter()
             .map(|(item, _)| item)
             .chain(self.trailing.iter())
     }
 
-    pub fn items_mut(&mut self) -> impl Iterator<Item = &mut Item> {
+    pub fn items_mut(&mut self) -> impl Iterator<Item=&mut Item> {
         self.items.iter_mut().map(|(item, _)| item)
     }
 }

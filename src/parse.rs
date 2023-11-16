@@ -12,8 +12,8 @@ mod separated;
 mod stream;
 
 pub trait Parse<'a>
-where
-    Self: Sized,
+    where
+        Self: Sized,
 {
     fn parse(input: &mut ParseStream<'a>) -> Result<Self, ParseError>;
 }

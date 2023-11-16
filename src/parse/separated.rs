@@ -44,21 +44,21 @@ impl<Item, Punct> Separated<Item, Punct> {
         self.items.len() + 1
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&Item, Option<&Punct>)> {
+    pub fn iter(&self) -> impl Iterator<Item=(&Item, Option<&Punct>)> {
         self.items
             .iter()
             .map(|(item, punct)| (item, Some(punct)))
             .chain(std::iter::once((&self.trailing, None)))
     }
 
-    pub fn items(&self) -> impl Iterator<Item = &Item> {
+    pub fn items(&self) -> impl Iterator<Item=&Item> {
         self.items
             .iter()
             .map(|(item, _)| item)
             .chain(std::iter::once(&self.trailing))
     }
 
-    pub fn puncts(&self) -> impl Iterator<Item = &Punct> {
+    pub fn puncts(&self) -> impl Iterator<Item=&Punct> {
         self.items.iter().map(|(_, punct)| punct)
     }
 }

@@ -120,7 +120,7 @@ macro_rules! ident {
 
 #[macro_export]
 macro_rules! keywords {
-    (ident $ident:ident; $(pub struct $name:ident($lex:literal));* $(;)?) => {
+    (for $ident:ident; $(pub struct $name:ident($lex:literal));* $(;)?) => {
         impl $ident<'static> {
             pub const KEYWORDS: &'static [&'static str] = &[
                 $($lex),*
@@ -181,7 +181,7 @@ fn test_ident() {
     }
 
     keywords! {
-        ident Ident;
+        for Ident;
 
         pub struct Use("use");
         pub struct Let("let");
