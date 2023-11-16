@@ -1,4 +1,6 @@
+use std::str::FromStr;
 use crate::{ident, keywords, punct};
+use crate::parse::{Parse, ParseError, ParseStream, Span};
 
 ident! {
     pub struct CIdent<'a>(
@@ -71,4 +73,263 @@ punct! {
     pub struct DoubleQuestion("??");
     pub struct DoubleDot("..");
     pub struct TripleDot("...");
+}
+
+#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct LitBool {
+    value: bool,
+    span: Span,
+}
+
+impl LitBool {
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    #[inline]
+    pub fn content(&self) -> bool {
+        self.value
+    }
+}
+
+#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct LitInt {
+    value: u64,
+    span: Span,
+}
+
+impl LitInt {
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    #[inline]
+    pub fn content(&self) -> u64 {
+        self.value
+    }
+}
+
+#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct LitDecimal {
+    value: f64,
+    span: Span,
+}
+
+impl LitDecimal {
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    #[inline]
+    pub fn content(&self) -> f64 {
+        self.value
+    }
+}
+
+#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct LitCStr {
+    value: String,
+    span: Span,
+}
+
+impl LitCStr {
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    #[inline]
+    pub fn content(&self) -> &str {
+        &self.value
+    }
+}
+
+impl Parse<'_> for LitBool {
+    fn parse(input: &mut ParseStream<'_>) -> Result<Self, ParseError> {
+        input.take_while(|c| c.is_whitespace());
+        let spanner = input.spanner();
+        let value = input.take_while(|c| c.is_alphabetic());
+        match value {
+            "true" => Ok(LitBool { value: true, span: spanner.span() }),
+            "false" => Ok(LitBool { value: false, span: spanner.span() }),
+            _ => {
+                input.reset(spanner);
+                Err(input.error("expected boolean literal"))
+            }
+        }
+    }
+}
+
+impl Parse<'_> for LitInt {
+    fn parse(input: &mut ParseStream<'_>) -> Result<Self, ParseError> {
+        input.take_while(|c| c.is_whitespace());
+        let spanner = input.spanner();
+        let radix = if input.take_str("0x") {
+            16
+        } else if input.take_str("0o") {
+            8
+        } else if input.take_str("0b") {
+            2
+        } else {
+            10
+        };
+
+        let content = input.take_while(|c| c.is_digit(radix) || c == '_');
+        if content.is_empty() {
+            if radix == 10 {
+                input.reset(spanner);
+                return Err(input.error("expected integer literal"));
+            }
+            return Err(input.error(format!("expected integer literal with radix: {}", radix)));
+        }
+
+        let value = u64::from_str_radix(content, radix)
+            .map_err(|e| input.error(format!("invalid integer literal: {}", e)))?;
+        Ok(LitInt { value, span: spanner.span() })
+    }
+}
+
+impl Parse<'_> for LitDecimal {
+    fn parse(input: &mut ParseStream<'_>) -> Result<Self, ParseError> {
+        input.take_while(|c| c.is_whitespace());
+        let spanner = input.spanner();
+        let content = input.take_while(|c| c.is_digit(10) || c == '_');
+        if content.is_empty() {
+            return Err(input.mismatch());
+        }
+
+        if input.take_char('e') || input.take_char('E') {
+            let _ = input.take_char('+') || input.take_char('-');
+            let exponent = input.take_while(|c| c.is_digit(10) || c == '_');
+            if exponent.is_empty() {
+                input.reset(spanner);
+                return Err(input.error("invalid exponential literal! <float>e[+-]<int>"));
+            }
+        } else if !input.take_char('.') {
+            input.reset(spanner);
+            return Err(input.mismatch()); // this is kinda shaky but for integer compat we'll go with it
+        } else {
+            let content = input.take_while(|c| c.is_digit(10) || c == '_');
+            if content.is_empty() {
+                input.reset(spanner);
+                return Err(input.error("invalid decimal literal! <int>.<int>"));
+            }
+        }
+
+        let content = input.source_for_span(input.span(spanner));
+        let value = f64::from_str(content)
+            .map_err(|e| input.error(format!("invalid decimal literal: {}", e)))?;
+        Ok(LitDecimal { value, span: spanner.span() })
+    }
+}
+
+impl Parse<'_> for LitCStr {
+    fn parse(input: &mut ParseStream) -> Result<Self, ParseError> {
+        input.take_while(|c| c.is_whitespace());
+        let span = input.spanner();
+
+        if !input.take_char('"') {
+            return Err(input.mismatch());
+        }
+
+        let mut content = String::new();
+        while let Some(c) = input.peek_char() {
+            if c == '\r' || c == '\n' || c == '"' {
+                break;
+            }
+
+            if c != '\\' {
+                content.push(c);
+                input.advance();
+                continue;
+            }
+
+            input.advance();
+            let Some(c) = input.advance() else {
+                break;
+            };
+
+            match c {
+                'n' => content.push('\n'),
+                'r' => content.push('\r'),
+                't' => content.push('\t'),
+                '\\' => content.push('\\'),
+                '"' => content.push('"'),
+                'u' => {
+                    if !input.take_char('{') {
+                        return Err(input.error("invalid escape sequence"));
+                    }
+                    let span = input.spanner();
+                    let _ = std::iter::from_fn(|| input.advance())
+                        .take(4)
+                        .filter(char::is_ascii_hexdigit)
+                        .count();
+                    let span = input.span(span);
+                    if !input.take_char('}') {
+                        return Err(input.error("invalid escape sequence -- missing closing `}`"));
+                    }
+                    let substring = input.source_for_span(span);
+                    let Ok(codepoint) = u32::from_str_radix(substring, 16) else {
+                        return Err(input.error("invalid escape sequence -- invalid codepoint"));
+                    };
+                    let Some(codepoint) = char::from_u32(codepoint) else {
+                        return Err(input.error("invalid escape sequence -- invalid codepoint"));
+                    };
+                    content.push(codepoint);
+                }
+                'U' => {
+                    if !input.take_char('{') {
+                        return Err(input.error("invalid escape sequence"));
+                    }
+
+                    let span = input.spanner();
+                    let _ = std::iter::from_fn(|| input.advance())
+                        .take(8)
+                        .filter(char::is_ascii_hexdigit)
+                        .count();
+                    let span = input.span(span);
+
+                    if !input.take_char('}') {
+                        return Err(input.error("invalid escape sequence -- missing closing `}`"));
+                    }
+                    let substring = input.source_for_span(span);
+                    let Ok(codepoint) = u32::from_str_radix(substring, 16) else {
+                        return Err(input.error("invalid escape sequence -- invalid codepoint"));
+                    };
+                    let Some(codepoint) = char::from_u32(codepoint) else {
+                        return Err(input.error("invalid escape sequence -- invalid codepoint"));
+                    };
+                    content.push(codepoint);
+                }
+                'x' => {
+                    let span = input.spanner();
+                    let _ = std::iter::from_fn(|| input.advance())
+                        .take(2)
+                        .filter(char::is_ascii_hexdigit)
+                        .count();
+                    let span = input.span(span);
+                    let substring = input.source_for_span(span);
+                    let Ok(codepoint) = u32::from_str_radix(substring, 16) else {
+                        return Err(input.error("invalid escape sequence -- invalid codepoint"));
+                    };
+                    let Some(codepoint) = char::from_u32(codepoint) else {
+                        return Err(input.error("invalid escape sequence -- invalid codepoint"));
+                    };
+                    content.push(codepoint);
+                }
+                _ => return Err(input.error("invalid escape sequence")),
+            }
+        }
+        if !input.take_char('"') {
+            return Err(input.error("unterminated string literal"));
+        }
+
+        Ok(Self {
+            value: content,
+            span: input.span(span),
+        })
+    }
 }
