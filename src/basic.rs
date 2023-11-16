@@ -23,7 +23,8 @@ impl CIdent {
 impl Parse<'_> for CIdent {
     fn parse(input: &mut ParseStream<'_>) -> Result<Self, ParseError> {
         input.take_while(|c| c.is_whitespace());
-        if !input.peek_char().is_some_and(|c| c.is_ascii_digit()) {
+
+        if !input.peek_char().is_some_and(|c| c.is_alphabetic()) {
             return Err(input.mismatch());
         }
         let spanner = input.spanner();
