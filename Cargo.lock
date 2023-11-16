@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "parser"
+name = "dparse"
 version = "0.1.0"

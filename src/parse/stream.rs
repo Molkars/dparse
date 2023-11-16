@@ -180,11 +180,11 @@ impl<'a> ParseStream<'a> {
     }
 
     #[inline(always)]
-    pub fn substring(&self, span: Span) -> &'a str {
+    pub fn source_for_span(&self, span: Span) -> &'a str {
         self.source.index(span.index..).index(..span.length)
     }
 
-    pub fn line_substring(&self, span: Span) -> &'a str {
+    pub fn line_source_for_span(&self, span: Span) -> &'a str {
         let start = self.source[..span.index]
             .rfind('\n')
             .map(|i| i + 1)
@@ -211,6 +211,11 @@ impl<'a> ParseStream<'a> {
         self.cursor
     }
 
+    #[inline(always)]
+    pub fn has_next(&self) -> bool {
+        !self.cursor.is_empty()
+    }
+
     pub fn find_char(&mut self, c: char) -> Option<Span> {
         let span = self.spanner();
         self.cursor.find(c).map(|index| {
@@ -235,12 +240,7 @@ impl<'a> ParseStream<'a> {
     }
 
     #[inline(always)]
-    pub fn has_next(&self) -> bool {
-        !self.cursor.is_empty()
-    }
-
-    #[inline(always)]
-    pub fn peek_n(&'a self, n: usize) -> Option<&'a str> {
+    pub fn peek_str(&'a self, n: usize) -> Option<&'a str> {
         if self.cursor.len() < n {
             None
         } else {
@@ -289,18 +289,49 @@ impl<'a> ParseStream<'a> {
             })
     }
 
-    pub fn peek_str(&self, content: impl AsRef<str>) -> bool {
+
+    pub fn match_char(&self, c: char) -> bool {
+        self.cursor.chars().next() == Some(c)
+    }
+
+    pub fn match_str(&self, content: impl AsRef<str>) -> bool {
         let content = content.as_ref();
         self.cursor.len() >= content.len()
             && self
-                .cursor
-                .chars()
-                .zip(content.chars())
-                .all(|(a, b)| a == b)
+            .cursor
+            .chars()
+            .zip(content.chars())
+            .all(|(a, b)| a == b)
+    }
+
+    pub fn take_char(&mut self, c: char) -> bool {
+        if self.cursor.chars().next() == Some(c) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn take_str(&mut self, content: impl AsRef<str>) -> bool {
+        let content = content.as_ref();
+        if self.cursor.len() >= content.len()
+            && self
+            .cursor
+            .chars()
+            .zip(content.chars())
+            .all(|(a, b)| a == b)
+        {
+            self.index += content.len();
+            self.cursor = &self.cursor[content.len()..];
+            true
+        } else {
+            false
+        }
     }
 
     #[inline]
-    pub fn take_char(&mut self) -> Option<char> {
+    pub fn advance(&mut self) -> Option<char> {
         let next = self.peek_char()?;
         self.index += next.len_utf8();
         self.cursor = &self.cursor[next.len_utf8()..];
@@ -309,8 +340,8 @@ impl<'a> ParseStream<'a> {
 
     #[inline]
     pub fn take_while<F>(&mut self, f: F) -> &'a str
-    where
-        F: Fn(char) -> bool,
+        where
+            F: Fn(char) -> bool,
     {
         let mut chars = self.cursor.chars();
         let mut len = 0;
@@ -324,22 +355,5 @@ impl<'a> ParseStream<'a> {
         self.cursor = &self.cursor[len..];
         self.index += len;
         result
-    }
-
-    #[inline]
-    pub fn try_take_str(&mut self, c: &str) -> Option<Span> {
-        let spanner = self.spanner();
-        if self.cursor.len() < c.len() {
-            return None;
-        }
-        self.cursor
-            .chars()
-            .zip(c.chars())
-            .all(|(a, b)| a == b)
-            .then(|| {
-                self.index += c.len();
-                self.cursor = &self.cursor[c.len()..];
-                self.span(spanner)
-            })
     }
 }

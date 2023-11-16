@@ -10,8 +10,11 @@ macro_rules! punct {
                 #[inline(always)]
                 fn parse(input: &mut $crate::parse::ParseStream<'a>) -> Result<Self, $crate::parse::ParseError> {
                     input.take_while(|c| c.is_whitespace());
-                    if let Some(span) = input.try_take_str($lex) {
-                        Ok(Self { span })
+                    let spanner = input.spanner();
+                    if input.take_str($lex) {
+                        Ok(Self {
+                            span: input.span(spanner)
+                        })
                     } else {
                         Err(input.mismatch())
                     }
