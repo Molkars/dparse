@@ -46,6 +46,8 @@ impl Display for ParseError {
         for (i, message) in self.messages.iter().enumerate() {
             writeln!(f, "  {: <4}: {}", i + 1, message)?;
         }
+        #[cfg(any(debug_assertions, feature = "track_caller"))]
+        writeln!(f, "  {: <4}: {}", self.messages.len() + 1, self.trace)?;
         Ok(())
     }
 }
@@ -143,7 +145,7 @@ pub struct Spanner {
 }
 
 impl ParseError {
-    pub fn messages(&self) -> impl Iterator<Item = &str> + '_ {
+    pub fn messages(&self) -> impl Iterator<Item=&str> + '_ {
         self.messages.iter().map(|s| s.as_str())
     }
 
