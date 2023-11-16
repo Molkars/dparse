@@ -1,16 +1,35 @@
 use std::str::FromStr;
-use crate::{ident, keywords, punct};
+use crate::punct;
 use crate::parse::{Parse, ParseError, ParseStream, Span};
 
-ident! {
-    pub struct CIdent<'a>(
-        |c| c.is_alphabetic() || c == '_';
-        |c| c.is_alphanumeric() || c == '_'
-    )
+pub struct CIdent {
+    value: String,
+    span: Span,
 }
 
-keywords! {
-    for CIdent;
+impl CIdent {
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    #[inline]
+    pub fn content(&self) -> &str {
+        &self.value
+    }
+}
+
+impl Parse<'_> for CIdent {
+    fn parse(input: &mut ParseStream<'_>) -> Result<Self, ParseError> {
+        input.take_while(|c| c.is_whitespace());
+        if !input.peek_char().is_some_and(|c| c.is_ascii_digit()) {
+            return Err(input.mismatch());
+        }
+        let spanner = input.spanner();
+        let content = input.take_while(|c| c.is_ascii_alphanumeric() || c == '_');
+
+        Ok(CIdent { value: content.to_string(), span: input.span(spanner) })
+    }
 }
 
 punct! {
@@ -111,7 +130,7 @@ impl LitInt {
     }
 }
 
-#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
 pub struct LitDecimal {
     value: f64,
     span: Span,
@@ -153,8 +172,8 @@ impl Parse<'_> for LitBool {
         let spanner = input.spanner();
         let value = input.take_while(|c| c.is_alphabetic());
         match value {
-            "true" => Ok(LitBool { value: true, span: spanner.span() }),
-            "false" => Ok(LitBool { value: false, span: spanner.span() }),
+            "true" => Ok(LitBool { value: true, span: input.span(spanner) }),
+            "false" => Ok(LitBool { value: false, span: input.span(spanner) }),
             _ => {
                 input.reset(spanner);
                 Err(input.error("expected boolean literal"))
@@ -188,7 +207,7 @@ impl Parse<'_> for LitInt {
 
         let value = u64::from_str_radix(content, radix)
             .map_err(|e| input.error(format!("invalid integer literal: {}", e)))?;
-        Ok(LitInt { value, span: spanner.span() })
+        Ok(LitInt { value, span: input.span(spanner) })
     }
 }
 
@@ -222,7 +241,7 @@ impl Parse<'_> for LitDecimal {
         let content = input.source_for_span(input.span(spanner));
         let value = f64::from_str(content)
             .map_err(|e| input.error(format!("invalid decimal literal: {}", e)))?;
-        Ok(LitDecimal { value, span: spanner.span() })
+        Ok(LitDecimal { value, span: input.span(spanner) })
     }
 }
 

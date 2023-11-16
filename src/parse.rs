@@ -50,7 +50,7 @@ impl Display for ParseError {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Span {
     index: usize,
     length: usize,
