@@ -2,6 +2,7 @@
 macro_rules! punct {
     ($(pub struct $name:ident($lex:literal));* $(;)?) => {
         $(
+            #[derive(Clone, Copy, PartialEq, Eq, Hash)]
             pub struct $name {
                 span: $crate::parse::Span,
             }

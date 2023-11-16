@@ -2,6 +2,7 @@ use std::str::FromStr;
 use crate::punct;
 use crate::parse::{Parse, ParseError, ParseStream, Span};
 
+#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CIdent {
     value: String,
     span: Span,
