@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::LinkedList;
 use std::fmt::{Debug, Display, Formatter};
 
 pub use on_line::OnLine;
@@ -21,7 +22,7 @@ pub trait Parse<'a>
 #[non_exhaustive]
 pub struct ParseError {
     pub(crate) mismatch: bool,
-    pub(crate) message: String,
+    pub(crate) messages: LinkedList<String>,
     pub(crate) span: Span,
     #[cfg(any(debug_assertions, feature = "track_caller"))]
     pub(crate) trace: std::backtrace::Backtrace,
@@ -31,7 +32,7 @@ impl Debug for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParseError")
             .field("mismatch", &self.mismatch)
-            .field("message", &self.message)
+            .field("messages", &self.messages)
             .field("span", &self.span)
             .finish()
     }
@@ -41,7 +42,11 @@ impl std::error::Error for ParseError {}
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "parse error at {}: {}", self.span, self.message)
+        write!(f, "parse error at {}:", self.span)?;
+        for (i, message) in self.messages.iter().enumerate() {
+            writeln!(f, "  {: <4}: {}", i + 1, message)?;
+        }
+        Ok(())
     }
 }
 
@@ -138,8 +143,8 @@ pub struct Spanner {
 }
 
 impl ParseError {
-    pub fn message(&self) -> &str {
-        self.message.as_str()
+    pub fn messages(&self) -> impl Iterator<Item = &str> + '_ {
+        self.messages.iter().map(|s| s.as_str())
     }
 
     pub fn is_mismatch(&self) -> bool {
@@ -208,3 +213,21 @@ tuple_impl!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
 tuple_impl!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
 tuple_impl!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
 tuple_impl!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15);
+
+
+pub trait WithMessage {
+    type Output;
+
+    fn with_message(self, message: impl Into<String>) -> Self::Output;
+}
+
+impl<T> WithMessage for Result<T, ParseError> {
+    type Output = Self;
+
+    fn with_message(self, message: impl Into<String>) -> Self::Output {
+        self.map_err(|mut e| {
+            e.messages.push_front(message.into());
+            e
+        })
+    }
+}

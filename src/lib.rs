@@ -21,16 +21,15 @@ pub fn unwrap<T>(result: Result<T, ParseError>) -> T {
     match result {
         Ok(t) => t,
         Err(e) => {
-            if cfg!(any(debug_assertions, feature = "track_caller")) {
-                eprintln!(
-                    "parse error[mismatch={}]: {}\n{}",
-                    e.mismatch, e.message, e.trace
-                );
-                abort();
-            } else {
-                eprintln!("parse error[mismatch={}]: {}", e.mismatch, e.message);
-                abort();
+            eprintln!("parse error[mismatch={}]", e.mismatch);
+            for message in &e.messages {
+                eprintln!("  {}", message);
             }
+            if cfg!(any(debug_assertions, feature = "track_caller")) {
+                eprintln!(" TRACE:");
+                eprintln!("{:?}", e.backtrace());
+            }
+            abort();
         }
     }
 }
@@ -43,7 +42,7 @@ pub fn required<'a, T: Parse<'a>>(
 ) -> Result<T, ParseError> {
     if let Err(e) = &mut result {
         e.mismatch = false;
-        e.message = match input.peek_char() {
+        e.messages.push_front(match input.peek_char() {
             Some(c) => format!(
                 "expected {}, instead found unexpected character '{}' at {}",
                 type_name::<T>(),
@@ -53,7 +52,7 @@ pub fn required<'a, T: Parse<'a>>(
             None => {
                 format!("expected {}, instead found end of input", type_name::<T>())
             }
-        };
+        });
     }
     result
 }

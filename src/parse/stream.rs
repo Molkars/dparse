@@ -1,4 +1,5 @@
 use std::backtrace::Backtrace;
+use std::collections::LinkedList;
 use std::ops::Index;
 
 use crate::parse::separated::Separated;
@@ -125,7 +126,7 @@ impl<'a> ParseStream<'a> {
                 self.start_index = start;
                 false
             }
-            Err(e) => {
+            Err(_) => {
                 self.start_index = start;
                 false
             }
@@ -177,7 +178,7 @@ impl<'a> ParseStream<'a> {
     pub fn mismatch(&self) -> ParseError {
         ParseError {
             mismatch: true,
-            message: String::from("mismatch"),
+            messages: LinkedList::from([String::from("mismatch")]),
             span: Span {
                 index: self.start_index,
                 length: self.index - self.start_index,
@@ -192,7 +193,7 @@ impl<'a> ParseStream<'a> {
     pub fn error(&self, message: impl Into<String>) -> ParseError {
         ParseError {
             mismatch: false,
-            message: message.into(),
+            messages: LinkedList::from([message.into()]),
             span: Span {
                 index: self.start_index,
                 length: self.index - self.start_index,
