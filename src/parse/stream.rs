@@ -96,17 +96,28 @@ impl<'a> ParseStream<'a> {
         self.start_index = self.index;
 
         let spanner = self.spanner();
+        println!("trying to parse {}: {} {:?}", std::any::type_name::<T>(),
+            self.index, self.peek_char());
         match T::parse(self) {
             Ok(value) => {
                 self.start_index = start;
+                println!("parsed {}: {} {:?}", std::any::type_name::<T>(),
+                    self.index, self.peek_char());
                 Ok(Some(value))
             }
             Err(e) if e.mismatch => {
+                // println!("  mismatch parsing {}: {} {:?}", std::any::type_name::<T>(),
+                //     self.index, self.peek_char());
                 self.reset(spanner);
                 self.start_index = start;
                 Ok(None)
             }
-            Err(e) => Err(e),
+            Err(e) => {
+                println!("  error parsing {}: {} {:?}", std::any::type_name::<T>(),
+                    self.index, self.peek_char());
+                self.start_index = start;
+                Err(e)
+            }
         }
     }
 

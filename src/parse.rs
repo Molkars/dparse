@@ -47,7 +47,7 @@ impl Display for ParseError {
             writeln!(f, "  {: <4}: {}", i + 1, message)?;
         }
         #[cfg(any(debug_assertions, feature = "track_caller"))]
-        writeln!(f, "  {: <4}: {}", self.messages.len() + 1, self.trace)?;
+        writeln!(f, "{}", self.trace)?;
         Ok(())
     }
 }
