@@ -1,58 +1,16 @@
-// #![feature(result_option_inspect)]
 #![allow(dead_code)]
 
-use std::any::type_name;
-use std::process::abort;
+mod parse;
+mod token;
 
-use crate::parse::{Parse, ParseError, ParseStream};
+#[cfg(feature = "basic-tokens")]
+pub mod basic_tokens;
 
-pub mod parse;
-pub mod token;
-#[cfg(feature = "basic")]
-pub mod basic;
+#[cfg(feature = "basic-parser")]
+mod basic_parser;
 
-#[inline]
-pub fn parse<'a, T: Parse<'a>>(input: &'a str) -> Result<T, ParseError> {
-    let mut input = ParseStream::new(input);
-    T::parse(&mut input)
-}
+pub use parse::{Parse, Parser, ParseError, ParseErrorWithContext, ParseResult};
+pub use token::{Location, Span, ToStatic};
 
-pub fn unwrap<T>(result: Result<T, ParseError>) -> T {
-    match result {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("parse error[mismatch={}]", e.mismatch);
-            for message in &e.messages {
-                eprintln!("  {}", message);
-            }
-            if cfg!(any(debug_assertions, feature = "track_caller")) {
-                eprintln!(" TRACE:");
-                eprintln!("{:?}", e.backtrace());
-            }
-            abort();
-        }
-    }
-}
-
-#[inline]
-#[track_caller]
-pub fn required<'a, T: Parse<'a>>(
-    input: &ParseStream<'a>,
-    mut result: Result<T, ParseError>,
-) -> Result<T, ParseError> {
-    if let Err(e) = &mut result {
-        e.mismatch = false;
-        e.messages.push_front(match input.peek_char() {
-            Some(c) => format!(
-                "expected {}, instead found unexpected character '{}' at {}",
-                type_name::<T>(),
-                c,
-                input.span(input.spanner()).display(input)
-            ),
-            None => {
-                format!("expected {}, instead found end of input", type_name::<T>())
-            }
-        });
-    }
-    result
-}
+#[cfg(feature = "basic-tokens")]
+pub use basic_parser::*;
