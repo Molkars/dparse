@@ -5,6 +5,8 @@
       <sourceFolder url="file://$MODULE_DIR$/dparse-derive/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/dparse/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/dparse-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/dparse/examples" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
