@@ -48,7 +48,7 @@ pub trait Lexer {
     fn location(&self) -> Location;
     fn set_location(&mut self, location: Location);
     
-    fn span_contents(&self, span: Span) -> &str {
+    fn slice(&self, span: Span) -> &str {
         &self.source()[span.range()]
     }
 

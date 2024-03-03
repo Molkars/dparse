@@ -18,4 +18,12 @@ impl Span {
     pub fn range(&self) -> Range<usize> {
         self.start.index..self.start.index + self.len
     }
+    
+    pub fn new(start: Location, end: Location) -> Self {
+        assert!(start.index < end.index);
+        Self {
+            start,
+            len: end.index - start.index,
+        }
+    }
 }
