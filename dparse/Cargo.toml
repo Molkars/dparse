@@ -1,0 +1,22 @@
+[package]
+name = "dparse"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dparse-core = { version = "0.1.0", path = "../dparse-core" }
+
+[features]
+default = ["basic"]
+basic-parser = []
+basic-tokens = []
+basic = ["basic-parser", "basic-tokens"]
+backtrace = []
+
+[[example]]
+name = "token_set"
+
+[[example]]
+name = "c"
