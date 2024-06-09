@@ -194,6 +194,11 @@ impl<'a> Parser<'a> {
         self.peek_char()
             .inspect(|c| self.location.advance(*c))
     }
+
+    #[inline]
+    pub fn error(&self, msg: impl Into<String>) -> ParseError {
+        ParseError::new(msg, self.location)
+    }
 }
 
 pub trait ParsePrimitive {
