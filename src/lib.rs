@@ -43,11 +43,7 @@ pub struct ParseError {
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "parse error occurred at {}:{} ({})",
-            self.location.line, self.location.column, self.location.index
-        )?;
+        writeln!(f, "parse error occurred at {}:{} ({})", self.location.line, self.location.column, self.location.index)?;
         writeln!(f, "  {}", self.message)?;
         Ok(())
     }
@@ -112,6 +108,20 @@ impl<'a> Parser<'a> {
         value
     }
 
+    pub fn test(
+        &mut self,
+        parse_fn: impl FnOnce(&mut Parser<'a>) -> bool,
+    ) -> bool {
+        self.whitespace();
+        let mut parser = self.clone();
+        if parse_fn(&mut parser) {
+            self.location = parser.location;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn at_end(&mut self) -> bool {
         if let Some(whitespace) = self.whitespace.clone() {
             whitespace(self);
@@ -150,6 +160,7 @@ impl<'a> Parser<'a> {
         self.at_end() || filter.peek(self)
     }
 
+
     #[inline]
     pub fn take<P: ParsePrimitive>(&mut self, filter: P) -> bool {
         self.whitespace();
@@ -177,19 +188,12 @@ impl<'a> Parser<'a> {
     }
 
     #[inline]
-    pub fn expect<P: ParsePrimitive + Copy + Debug>(
-        &mut self,
-        filter: P,
-    ) -> Result<(), ParseError> {
+    pub fn expect<P: ParsePrimitive + Copy + Debug>(&mut self, filter: P) -> Result<(), ParseError> {
         self.whitespace();
         if filter.take(self) {
             Ok(())
         } else {
-            Err(ParseError::new_spanned(
-                format!("Expected {:?}", filter),
-                self.location,
-                filter.len(),
-            ))
+            Err(ParseError::new_spanned(format!("Expected {:?}", filter), self.location, filter.len()))
         }
     }
 
@@ -201,7 +205,8 @@ impl<'a> Parser<'a> {
 
     #[inline]
     pub fn take_char(&mut self) -> Option<char> {
-        self.peek_char().inspect(|c| self.location.advance(*c))
+        self.peek_char()
+            .inspect(|c| self.location.advance(*c))
     }
 
     #[inline]
@@ -230,29 +235,6 @@ impl ParsePrimitive for char {
         } else {
             false
         }
-    }
-
-    fn len(&self) -> usize {
-        1
-    }
-}
-
-impl<const N: usize> ParsePrimitive for [char; N] {
-    #[inline]
-    fn peek(self, parser: &Parser) -> bool {
-        parser.source[parser.location.index..]
-            .chars()
-            .next()
-            .is_some_and(|c| self.into_iter().any(|a| a == c))
-    }
-
-    fn take(self, parser: &mut Parser) -> bool {
-        parser.source[parser.location.index..]
-            .chars()
-            .next()
-            .and_then(|c| self.into_iter().find(|a| *a == c))
-            .inspect(|a| parser.location.advance(*a))
-            .is_some()
     }
 
     fn len(&self) -> usize {
@@ -315,23 +297,16 @@ impl<T: FnOnce(char) -> bool> ParsePrimitive for T {
 mod lock_test {
     use super::{Parser, ParserFilter};
 
-    struct WsLock<'a, 'parent>
-    where
-        'a: 'parent,
-    {
+    struct WsLock<'a, 'parent> where 'a: 'parent {
         previous: Option<ParserFilter>,
-        parser: &'parent mut MyParser<'a>,
+        parser: &'parent mut MyParser<'a>
     }
     impl<'a, 'b> std::ops::Deref for WsLock<'a, 'b> {
         type Target = MyParser<'a>;
-        fn deref(&self) -> &Self::Target {
-            &self.parser
-        }
+        fn deref(&self) -> &Self::Target { &self.parser }
     }
     impl<'a, 'b> std::ops::DerefMut for WsLock<'a, 'b> {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.parser
-        }
+        fn deref_mut(&mut self) -> &mut Self::Target { &mut self.parser }
     }
     impl<'a, 'b> std::ops::Drop for WsLock<'a, 'b> {
         fn drop(&mut self) {
@@ -345,14 +320,10 @@ mod lock_test {
     }
     impl<'a> std::ops::Deref for MyParser<'a> {
         type Target = Parser<'a>;
-        fn deref(&self) -> &Self::Target {
-            &self.inner
-        }
+        fn deref(&self) -> &Self::Target { &self.inner }
     }
     impl std::ops::DerefMut for MyParser<'_> {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
-        }
+        fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
     }
 
     impl<'a> MyParser<'a> {
@@ -395,8 +366,8 @@ mod lock_test {
 #[test]
 fn whitespace_test() {
     const SRC: &str = " 1";
-    let mut parser =
-        Parser::new(SRC).with_whitespace(|parser| while parser.take(char::is_whitespace) {});
+    let mut parser = Parser::new(SRC)
+        .with_whitespace(|parser| while parser.take(char::is_whitespace) {});
     assert_eq!(Some('1'), parser.take_char());
 }
 
@@ -435,12 +406,11 @@ fn parser_demo() {
             }
             parser.expect('\'')?;
             Ok(content)
-        }))
-        .transpose()
+        })).transpose()
     };
 
-    let mut parser =
-        Parser::new("-12 'hey!' okay?").with_whitespace(|p| while p.take(char::is_whitespace) {});
+    let mut parser = Parser::new("-12 'hey!' okay?")
+        .with_whitespace(|p| while p.take(char::is_whitespace) {});
     assert!(matches!(parse_no(&mut parser), Ok(-12i32)));
     assert!(matches!(parse_str(&mut parser), Ok(Some(x)) if x == "hey!"));
     assert!(parser.expect("got it?").is_err());
