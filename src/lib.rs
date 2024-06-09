@@ -5,11 +5,13 @@ use std::rc::Rc;
 #[cfg(feature = "c_ident")]
 pub mod c_ident;
 
+pub type ParserFilter = Rc<dyn for<'b> Fn(&mut Parser<'b>)>;
+
 #[derive(Clone)]
 pub struct Parser<'a> {
     pub source: &'a str,
     pub location: Location,
-    pub whitespace: Option<Rc<dyn for<'b> Fn(&mut Parser<'b>)>>,
+    pub whitespace: Option<ParserFilter>,
     // comment: Option<Rc<dyn for<'b> Fn(&mut Parser<'b>)>>,
 }
 
@@ -123,29 +125,67 @@ impl<'a> Parser<'a> {
     }
 
     #[inline]
-    pub fn peek<P: ParsePrimitive>(&mut self, p: P) -> bool {
+    pub fn peek<P: ParsePrimitive>(&mut self, filter: P) -> bool {
         self.whitespace();
-        p.peek(self)
+        filter.peek(self)
     }
 
     #[inline]
-    pub fn take<P: ParsePrimitive>(&mut self, p: P) -> bool {
+    pub fn peek_unless<P: ParsePrimitive + Copy>(&mut self, filter: P) -> Option<char> {
         self.whitespace();
-        p.take(self)
-    }
-
-    #[inline]
-    pub fn expect<P: ParsePrimitive + Copy + Debug>(&mut self, p: P) -> Result<(), ParseError> {
-        self.whitespace();
-        if p.take(self) {
-            Ok(())
+        if filter.peek(self) {
+            None
         } else {
-            Err(ParseError::new_spanned(format!("Expected {:?}", p), self.location, p.len()))
+            self.peek_char()
         }
     }
 
     #[inline]
-    pub fn peek_char(&self) -> Option<char> {
+    pub fn peek_terminal<P: ParsePrimitive>(&mut self, filter: P) -> bool {
+        self.whitespace();
+        self.at_end() || filter.peek(self)
+    }
+
+
+    #[inline]
+    pub fn take<P: ParsePrimitive>(&mut self, filter: P) -> bool {
+        self.whitespace();
+        filter.take(self)
+    }
+
+    #[inline]
+    pub fn take_if<P: ParsePrimitive + Copy>(&mut self, filter: P) -> Option<char> {
+        self.whitespace();
+        if filter.peek(self) {
+            self.take_char()
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn take_unless<P: ParsePrimitive + Copy>(&mut self, filter: P) -> Option<char> {
+        self.whitespace();
+        if filter.peek(self) {
+            None
+        } else {
+            self.take_char()
+        }
+    }
+
+    #[inline]
+    pub fn expect<P: ParsePrimitive + Copy + Debug>(&mut self, filter: P) -> Result<(), ParseError> {
+        self.whitespace();
+        if filter.take(self) {
+            Ok(())
+        } else {
+            Err(ParseError::new_spanned(format!("Expected {:?}", filter), self.location, filter.len()))
+        }
+    }
+
+    #[inline]
+    pub fn peek_char(&mut self) -> Option<char> {
+        self.whitespace();
         self.remaining().chars().next()
     }
 
@@ -234,3 +274,127 @@ impl<T: FnOnce(char) -> bool> ParsePrimitive for T {
     }
 }
 
+#[cfg(test)]
+mod lock_test {
+    use super::{Parser, ParserFilter};
+
+    struct WsLock<'a, 'parent> where 'a: 'parent {
+        previous: Option<ParserFilter>,
+        parser: &'parent mut MyParser<'a>
+    }
+    impl<'a, 'b> std::ops::Deref for WsLock<'a, 'b> {
+        type Target = MyParser<'a>;
+        fn deref(&self) -> &Self::Target { &self.parser }
+    }
+    impl<'a, 'b> std::ops::DerefMut for WsLock<'a, 'b> {
+        fn deref_mut(&mut self) -> &mut Self::Target { &mut self.parser }
+    }
+    impl<'a, 'b> std::ops::Drop for WsLock<'a, 'b> {
+        fn drop(&mut self) {
+            use std::ops::DerefMut;
+            self.parser.deref_mut().whitespace = self.previous.clone();
+        }
+    }
+
+    struct MyParser<'a> {
+        inner: Parser<'a>,
+    }
+    impl<'a> std::ops::Deref for MyParser<'a> {
+        type Target = Parser<'a>;
+        fn deref(&self) -> &Self::Target { &self.inner }
+    }
+    impl std::ops::DerefMut for MyParser<'_> {
+        fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
+    }
+
+    impl<'a> MyParser<'a> {
+        pub fn new(source: &'a str) -> Self {
+            let inner = Parser::new(source)
+                .with_whitespace(|parser| while parser.take(char::is_whitespace) {});
+            Self { inner }
+        }
+
+        pub fn no_whitespace(&mut self) -> WsLock<'a, '_> {
+            let previous = self.whitespace.clone();
+            self.whitespace = None;
+            WsLock {
+                previous,
+                parser: self,
+            }
+        }
+    }
+
+    #[test]
+    fn lock_test() {
+        const SRC: &str = r#" " hi there " "#;
+        let mut parser = MyParser::new(SRC);
+
+        assert!(parser.take('"'));
+        let string = {
+            let mut parser = parser.no_whitespace();
+            let start = parser.location;
+            while !parser.peek_terminal('"') {
+                parser.take_char();
+            }
+            let end = parser.location;
+            parser.source[start.index..end.index].to_owned()
+        };
+        assert_eq!(string, " hi there ");
+        assert!(parser.take('"'));
+    }
+}
+
+#[test]
+fn whitespace_test() {
+    const SRC: &str = " 1";
+    let mut parser = Parser::new(SRC)
+        .with_whitespace(|parser| while parser.take(char::is_whitespace) {});
+    assert_eq!(Some('1'), parser.take_char());
+}
+
+#[test]
+fn parser_demo() {
+    let parse_no = |parser: &mut Parser| {
+        // atomic disables the filter for the inner function
+        parser.atomic(|parser| {
+            let is_negative = parser.take('-');
+
+            if !parser.peek(|c: char| c.is_ascii_digit()) {
+                return Err(ParseError::new("expected digit", parser.location));
+            }
+
+            let mut out = 0i32;
+            while let Some(c) = parser.take_if(|c: char| c.is_ascii_digit()) {
+                out *= 10;
+                out += c as i32 - '0' as i32;
+            }
+            if is_negative {
+                out *= -1;
+            }
+            Ok(out)
+        })
+    };
+
+    let parse_str = |parser: &mut Parser| {
+        if !parser.take('\'') {
+            return Ok(None);
+        }
+
+        Some(parser.atomic(|parser| {
+            let mut content = String::new();
+            while let Some(c) = parser.take_unless('\'') {
+                content.push(c);
+            }
+            parser.expect('\'')?;
+            Ok(content)
+        })).transpose()
+    };
+
+    let mut parser = Parser::new("-12 'hey!' okay?")
+        .with_whitespace(|p| while p.take(char::is_whitespace) {});
+    assert!(matches!(parse_no(&mut parser), Ok(-12i32)));
+    assert!(matches!(parse_str(&mut parser), Ok(Some(x)) if x == "hey!"));
+    assert!(parser.expect("got it?").is_err());
+    assert!(parser.expect("okay?").is_ok());
+    assert!(parser.at_end())
+}
